@@ -1,5 +1,8 @@
+pub mod response_parser;
+pub mod thread_pool;
+
 pub mod http {
-	pub mod http_macro;
-	pub mod formatter;
-	pub mod thread;
+	pub mod handler;
+	pub mod route;
+	pub mod favicon;
 }
