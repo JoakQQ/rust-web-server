@@ -5,15 +5,3 @@ version = 3
 [[package]]
 name = "json_parser"
 version = "0.1.0"
-
-[[package]]
-name = "logger"
-version = "0.1.0"
-
-[[package]]
-name = "web-server"
-version = "0.1.0"
-dependencies = [
- "json_parser",
- "logger",
-]
