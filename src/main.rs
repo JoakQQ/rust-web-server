@@ -16,7 +16,9 @@ fn main() {
         match stream_result {
             Ok(stream) => {
                 thread_pool.execute(|| {
-                    handle_connection(stream);
+                    if let Err(err) = handle_connection(stream) {
+                        logger::log!(error "{}", err);
+                    }
                 });
             }
             Err(err) => {

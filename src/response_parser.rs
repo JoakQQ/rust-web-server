@@ -1,5 +1,6 @@
 use logger;
 use std::{
+    collections::HashMap,
     fmt, fs,
     io::{self, Read, Write},
     net::TcpStream,
@@ -32,10 +33,10 @@ pub fn html_response_marco(stream: &TcpStream, html_file_name: &str, code: u16, 
 #[macro_export]
 macro_rules! html_response {
     ($stream:expr, $html_file_name:expr) => {
-        crate::response_parser::html_response_marco($stream, $html_file_name, 200, "OK");
+        crate::response_parser::html_response_marco($stream, $html_file_name, 200, "OK")
     };
     ($stream:expr, $html_file_name:expr, $code:expr, $status:expr) => {
-        crate::response_parser::html_response_marco($stream, $html_file_name, $code, $status);
+        crate::response_parser::html_response_marco($stream, $html_file_name, $code, $status)
     };
 }
 
@@ -90,12 +91,12 @@ impl fmt::Display for ParseHttpRequestError {
 
 pub fn parse_http_request(
     mut stream: &TcpStream,
-) -> Result<(Vec<(String, String)>, String), ParseHttpRequestError> {
+) -> Result<(HashMap<String, String>, String), ParseHttpRequestError> {
     let mut halt = false;
     let mut is_first_line = true;
     let mut is_headers_end = false;
     let mut request_body = String::new();
-    let mut headers: Vec<(String, String)> = Vec::new();
+    let mut headers: HashMap<String, String> = HashMap::new();
     let mut cur_header_size: usize = 0;
 
     loop {
@@ -125,21 +126,21 @@ pub fn parse_http_request(
                         is_first_line = false;
 
                         let mut line_iter = line.split(" ");
-                        headers.push(("Method".to_string(), line_iter.next().unwrap().to_string()));
-                        headers.push(("Path".to_string(), line_iter.next().unwrap().to_string()));
-                        headers.push((
+                        headers.insert("Method".to_string(), line_iter.next().unwrap().to_string());
+                        headers.insert("Path".to_string(), line_iter.next().unwrap().to_string());
+                        headers.insert(
                             "Protocol".to_string(),
                             line_iter.next().unwrap().to_string(),
-                        ));
+                        );
                     } else if !is_headers_end {
                         if line.contains(": ") {
                             cur_header_size += line.len();
 
                             let mut line_iter = line.split(": ");
-                            headers.push((
+                            headers.insert(
                                 line_iter.next().unwrap().to_string(),
                                 line_iter.next().unwrap().to_string(),
-                            ));
+                            );
                         } else {
                             is_headers_end = true;
                         }
@@ -156,11 +157,11 @@ pub fn parse_http_request(
     }
 
     if halt {
-        let headers = [
+        let response_headers = [
             String::from("HTTP/1.1 431 REQUEST HEADER FIELDS TOO LARGE"),
             String::from("\r\n"),
         ];
-        write_http_response!(&stream, headers.join("\r\n").as_bytes());
+        write_http_response!(&stream, response_headers.join("\r\n").as_bytes());
         return Err(ParseHttpRequestError);
     }
     Ok((headers, request_body))

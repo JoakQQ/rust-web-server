@@ -5,4 +5,6 @@ pub mod http {
 	pub mod handler;
 	pub mod route;
 	pub mod favicon;
+
+	pub type HttpResult = std::result::Result<(), &'static str>;
 }
