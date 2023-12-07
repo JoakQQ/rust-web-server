@@ -5,11 +5,11 @@ use web_server::{
 };
 
 fn main() {
-    let listener = TcpListener::bind("127.0.0.1:8080").unwrap();
+    let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
     let thread_pool = thread_pool::ThreadPool::new(4);
 
-    // logger::set_logger_env(logger::LoggerEnv::DEBUG);
-    println!("using logger environment {:?}", logger::get_logger_env());
+    logger::set_logger_level(logger::LoggerLevel::INFO);
+    println!("using logger level {}", logger::get_logger_level());
 
     logger::log!(info "listening to incoming http requests");
     for stream_result in listener.incoming() {

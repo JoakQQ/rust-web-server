@@ -1,88 +1,56 @@
 use logger;
 use std::{
-    env::join_paths,
-    fs,
-    io::{self, BufRead, BufReader, Write},
+    fmt, fs,
+    io::{self, Read, Write},
     net::TcpStream,
+    str,
 };
 
-pub struct HttpFormatter {
-    request_protocol: String,
+static mut MAX_HEADER_SIZE: usize = 1024;
+
+pub fn format_response(contents: &String, code: u16, status: &str) -> String {
+    let status_line = format!("HTTP/1.1 {code} {status}");
+    let content_length = contents.len();
+    format!("{status_line}\r\nContent-Length: {content_length}\r\n\r\n{contents}")
 }
 
-impl HttpFormatter {
-    pub fn new(request_protocol: String) -> Self {
-        HttpFormatter { request_protocol }
-    }
-
-    pub fn format_response(&self, contents: &String, code: u16, status: &str) -> String {
-        let status_line = format!("{} {code} {status}", self.request_protocol);
-        let content_length = contents.len();
-        format!("{status_line}\r\nContent-Length: {content_length}\r\n\r\n{contents}")
-    }
-
-    pub fn get_request_protocol(&self) -> String {
-        String::from(&self.request_protocol)
-    }
-}
-
-pub fn html_response_marco(
-    http_formatter: &HttpFormatter,
-    stream: &TcpStream,
-    html_file_name: &str,
-    code: u16,
-    status: &str,
-) {
+pub fn html_response_marco(stream: &TcpStream, html_file_name: &str, code: u16, status: &str) {
     let contents = match fs::read_to_string(html_file_name) {
         Ok(s) => s,
         Err(err) => {
             logger::log!(error "failed to read file \"{}\": {:?}", html_file_name, err);
             let content = "".to_string();
-            let response = http_formatter.format_response(&content, 500, "INTERNAL SERVER ERROR");
+            let response = format_response(&content, 500, "INTERNAL SERVER ERROR");
             crate::write_http_response!(&stream, response.as_bytes());
             return;
         }
     };
-    let response = http_formatter.format_response(&contents, code, status);
+    let response = format_response(&contents, code, status);
     crate::write_http_response!(&stream, response.as_bytes());
 }
 
 #[macro_export]
 macro_rules! html_response {
-    ($http_formatter:expr, $stream:expr, $html_file_name:expr) => {
-        crate::response_parser::html_response_marco(
-            $http_formatter,
-            $stream,
-            $html_file_name,
-            200,
-            "OK",
-        );
+    ($stream:expr, $html_file_name:expr) => {
+        crate::response_parser::html_response_marco($stream, $html_file_name, 200, "OK");
     };
-    ($http_formatter:expr, $stream:expr, $html_file_name:expr, $code:expr, $status:expr) => {
-        crate::response_parser::html_response_marco(
-            $http_formatter,
-            $stream,
-            $html_file_name,
-            $code,
-            $status,
-        );
+    ($stream:expr, $html_file_name:expr, $code:expr, $status:expr) => {
+        crate::response_parser::html_response_marco($stream, $html_file_name, $code, $status);
     };
 }
 
 #[macro_export]
 macro_rules! error_response {
-    (html $http_formatter:expr, $stream:expr) => {
+    (html $stream:expr) => {
         crate::response_parser::html_response_marco(
-            $http_formatter,
             $stream,
             "./static/500.html",
             500,
             "INTERNAL SERVER ERROR",
         );
     };
-    (http $http_formatter:expr, $stream:expr) => {
+    (http $stream:expr) => {
         crate::response_parser::html_response_marco(
-            $http_formatter,
             $stream,
             "./static/500.html",
             500,
@@ -111,62 +79,89 @@ macro_rules! write_http_response {
     }};
 }
 
-pub fn get_http_request_headers(buf_reader: BufReader<&mut TcpStream>) -> Vec<(String, String)> {
+#[derive(Debug, Clone)]
+pub struct ParseHttpRequestError;
+
+impl fmt::Display for ParseHttpRequestError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "failed to parse http request")
+    }
+}
+
+pub fn parse_http_request(
+    mut stream: &TcpStream,
+) -> Result<(Vec<(String, String)>, String), ParseHttpRequestError> {
+    let mut halt = false;
     let mut is_first_line = true;
     let mut is_headers_end = false;
-    let mut other = String::new();
-    let mut request_headers: Vec<(String, String)> = Vec::new();
-    let _request_lines: Vec<String> = buf_reader
-        .lines()
-        .map(|result| {
-            result.unwrap()
-            // let result = result.unwrap();
-            // if is_first_line {
-            //     let request_info: Vec<&str> = result.split(" ").collect();
-            //     request_headers.push(("Method".to_string(), request_info[0].to_string()));
-            //     request_headers.push(("Path".to_string(), request_info[1].to_string()));
-            //     request_headers.push(("Protocol".to_string(), request_info[2].to_string()));
-            //     is_first_line = false;
-            // } else if !is_headers_end {
-            //     if result.contains(": ") {
-            //         let request_vec: Vec<&str> = result.split(": ").collect();
-            //         request_headers.push((request_vec[0].to_string(), request_vec[1].to_string()));
-            //     } else {
-            //         is_headers_end = true;
-            //     }
-            // } else {
-            //     other.push_str(&result);
-            // }
-            // result
-        })
-        .collect();
-    // for line in buf_reader.lines() {
-    //     match line {
-    //         Ok(line) if is_first_line => {
-    //             let request_info: Vec<&str> = line.split(" ").collect();
-    //             request_headers.push(("Method".to_string(), request_info[0].to_string()));
-    //             request_headers.push(("Path".to_string(), request_info[1].to_string()));
-    //             request_headers.push(("Protocol".to_string(), request_info[2].to_string()));
-    //             is_first_line = false;
-    //         }
-    //         Ok(line) if !is_headers_end => {
-    //             if line.contains(": ") {
-    //                 let request_vec: Vec<&str> = line.split(": ").collect();
-    //                 request_headers.push((request_vec[0].to_string(), request_vec[1].to_string()));
-    //             } else {
-    //                 is_headers_end = true;
-    //             }
-    //         }
-    //         Ok(line) => {
-    //             other.push_str(&line);
-    //         }
-    //         Err(err) => {
-    //             logger::log!(error "failed to read http request line: {:?}", err);
-    //             return Vec::new()
-    //         }
-    //     }
-    // }
+    let mut request_body = String::new();
+    let mut headers: Vec<(String, String)> = Vec::new();
+    let mut cur_header_size: usize = 0;
 
-    println!("{:?}", request_headers);
-    request_headers
+    loop {
+        let mut cur_buf = [0; 1024];
+        if let Err(err) = stream.read(&mut cur_buf) {
+            logger::log!(error "failed to read stream: {:?}", err);
+        }
+
+        if halt {
+            continue;
+        }
+        if cur_header_size > unsafe { MAX_HEADER_SIZE } {
+            halt = true;
+        }
+
+        match str::from_utf8(&cur_buf) {
+            Ok(lines) => {
+                let lines: Vec<&str> = lines.split("\r\n").collect();
+                for line in lines {
+                    if is_first_line {
+                        if !line.contains(" ") {
+                            halt = true;
+                            continue;
+                        }
+
+                        cur_header_size += line.len();
+                        is_first_line = false;
+
+                        let mut line_iter = line.split(" ");
+                        headers.push(("Method".to_string(), line_iter.next().unwrap().to_string()));
+                        headers.push(("Path".to_string(), line_iter.next().unwrap().to_string()));
+                        headers.push((
+                            "Protocol".to_string(),
+                            line_iter.next().unwrap().to_string(),
+                        ));
+                    } else if !is_headers_end {
+                        if line.contains(": ") {
+                            cur_header_size += line.len();
+
+                            let mut line_iter = line.split(": ");
+                            headers.push((
+                                line_iter.next().unwrap().to_string(),
+                                line_iter.next().unwrap().to_string(),
+                            ));
+                        } else {
+                            is_headers_end = true;
+                        }
+                    } else {
+                        request_body.push_str(line);
+                    }
+                }
+            }
+            Err(_) => {}
+        }
+        if cur_buf[1023] == 0 {
+            break;
+        }
+    }
+
+    if halt {
+        let headers = [
+            String::from("HTTP/1.1 431 REQUEST HEADER FIELDS TOO LARGE"),
+            String::from("\r\n"),
+        ];
+        write_http_response!(&stream, headers.join("\r\n").as_bytes());
+        return Err(ParseHttpRequestError);
+    }
+    Ok((headers, request_body))
 }
