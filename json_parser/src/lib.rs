@@ -10,7 +10,7 @@ enum StackItem {
     Empty,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum JsonNode {
     Number(f64),
     String(String),
@@ -19,3 +19,4 @@ pub enum JsonNode {
 }
 
 pub mod decode;
+pub mod encode;
