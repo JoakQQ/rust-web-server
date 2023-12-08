@@ -5,7 +5,12 @@ pub fn encode_json(node: &JsonNode) -> String {
         JsonNode::Number(n) => return n.to_string(),
         JsonNode::String(s) => {
             let mut result: String = String::from('"');
-            result.push_str(s);
+            for c in s.chars() {
+                match c {
+                    '"' => result.push_str("\\\""),
+                    _ => result.push(c),
+                }
+            }
             result.push('"');
             result
         }
