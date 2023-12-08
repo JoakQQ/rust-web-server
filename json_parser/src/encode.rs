@@ -28,3 +28,8 @@ pub fn encode_json(node: &JsonNode) -> String {
         }
     }
 }
+
+pub fn encode_json_to_bytes(node: &JsonNode) -> Vec<u8> {
+    let s = encode_json(node);
+    s.into_bytes()
+}

@@ -1,8 +1,6 @@
 use logger;
 use std::net::TcpListener;
-use web_server::{
-    thread_pool, http::handler::handle_connection,
-};
+use web_server::{http::handler::handle_connection, thread_pool};
 
 fn main() {
     let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
